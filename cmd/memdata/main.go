@@ -3,7 +3,7 @@ package main
 import (
 	"github.com/dave/jennifer/jen"
 	"github.com/jessevdk/go-flags"
-	"memdata"
+	"gtihub.com/reddec/memdata"
 	"memdata/generator/model"
 	"os"
 )
