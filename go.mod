@@ -1,4 +1,4 @@
-module memdata
+module github.com/reddec/memdata
 
 require (
 	github.com/dave/jennifer v1.3.0
