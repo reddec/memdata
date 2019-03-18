@@ -2,7 +2,7 @@ package main
 
 import (
 	"github.com/jessevdk/go-flags"
-	"memdata/generator/tree"
+	"github.com/reddec/memdata/generator/tree"
 	"os"
 )
 

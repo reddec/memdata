@@ -4,7 +4,7 @@ import (
 	"github.com/dave/jennifer/jen"
 	"github.com/jessevdk/go-flags"
 	"github.com/reddec/memdata"
-	"memdata/generator/model"
+	"github.com/reddec/memdata/generator/model"
 	"os"
 )
 
