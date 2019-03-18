@@ -1,0 +1,10 @@
+name: Data
+package: model
+models:
+  - name: User
+    fields:
+      Id: int64
+      Name: string
+      Email: string
+      Token: string
+    key: Id
