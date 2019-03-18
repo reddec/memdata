@@ -1,0 +1,7 @@
+name: Transfer
+fields:
+  Id: int64
+  Amount: "*apd.Decimal"
+  From: $User
+  To: $User
+key: Id

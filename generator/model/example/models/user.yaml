@@ -1,0 +1,7 @@
+name: User
+fields:
+  Id: int64
+  Id2: int64
+  Name: string
+  Transfers: Transfer...
+key: Name

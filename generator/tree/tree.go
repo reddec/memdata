@@ -2,6 +2,7 @@ package tree
 
 import (
 	"bytes"
+	"memdata"
 	"text/template"
 )
 
@@ -15,11 +16,7 @@ type Tree struct {
 }
 
 func (t *Tree) IsKeyNum() bool {
-	switch t.KeyType {
-	case "int", "uint", "int8", "uint8", "int16", "uint16", "int32", "uint32", "int64", "uint64", "float32", "float64", "byte", "rune":
-		return true
-	}
-	return false
+	return memdata.IsNumType(t.KeyType)
 }
 
 //go:generate go-bindata -pkg tree template.gotemplate

@@ -1,0 +1,7 @@
+name: Storage
+package: main
+imports:
+  apd: github.com/reddec/apd
+include_models:
+  - models/transfer.yaml
+  - models/user.yaml

@@ -3,11 +3,11 @@ package memdata
 type Model struct {
 	Name         string
 	Fields       map[string]string
-	Unique       []string
 	Indexed      string
 	Ref          map[string]string
-	HasMany      map[string]string `yaml:"has_many"`
-	AutoSequence []string          `yaml:"auto_sequence"`
+	HasMany      map[string]string `yaml:"many"`
+	AutoSequence []string          `yaml:"sequence"`
+	Key          string            `yaml:"key"` // helper: adds to auto seq, unique and indexed
 	Project      *Project          `yaml:"-"`
 }
 
