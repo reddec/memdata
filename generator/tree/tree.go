@@ -2,7 +2,7 @@ package tree
 
 import (
 	"bytes"
-	"gtihub.com/reddec/memdata"
+	"github.com/reddec/memdata"
 	"text/template"
 )
 

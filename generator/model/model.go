@@ -2,7 +2,7 @@ package model
 
 import (
 	"github.com/dave/jennifer/jen"
-	"gtihub.com/reddec/memdata"
+	"github.com/reddec/memdata"
 )
 
 func GenerateModel(model *memdata.Model) *jen.Statement {

@@ -3,7 +3,7 @@ package model
 import (
 	"bytes"
 	"github.com/dave/jennifer/jen"
-	"gtihub.com/reddec/memdata"
+	"github.com/reddec/memdata"
 	"os"
 	"testing"
 )
