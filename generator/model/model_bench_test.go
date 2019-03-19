@@ -116,6 +116,26 @@ func (*treeAdapter) IterateUser(iterator func(id int64, item *User)) {
 
 }
 
+type btreeAdapter struct {
+	tree *BTree
+}
+
+func (ta *btreeAdapter) PutUser(id int64, item *User) {
+	ta.tree.Put(id, item)
+}
+
+func (*btreeAdapter) GetUser(id int64) *User {
+	panic("implement me")
+}
+
+func (*btreeAdapter) DeleteUser(id int64) {
+	panic("implement me")
+}
+
+func (*btreeAdapter) IterateUser(iterator func(id int64, item *User)) {
+
+}
+
 func BenchmarkModel_defaultInsert(b *testing.B) {
 	b.StopTimer()
 	stor := DefaultData()
@@ -159,6 +179,26 @@ func BenchmarkModel_arrayInsert(b *testing.B) {
 func BenchmarkModel_treeInsert(b *testing.B) {
 	b.StopTimer()
 	stor := NewData(&treeAdapter{NewTree()})
+
+	data := make([]*User, b.N)
+	for i := 0; i < b.N; i++ {
+		data[i] = &User{
+			Name:  "some name",
+			Id:    int64(i),
+			Email: "user@example.com",
+			Token: "123456XXYY",
+		}
+	}
+	b.StartTimer()
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		stor.InsertUser(data[i])
+	}
+}
+
+func BenchmarkModel_btreeInsert(b *testing.B) {
+	b.StopTimer()
+	stor := NewData(&btreeAdapter{NewBTree(100)})
 
 	data := make([]*User, b.N)
 	for i := 0; i < b.N; i++ {
