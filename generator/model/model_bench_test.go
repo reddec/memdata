@@ -198,7 +198,7 @@ func BenchmarkModel_treeInsert(b *testing.B) {
 
 func BenchmarkModel_btreeInsert(b *testing.B) {
 	b.StopTimer()
-	stor := NewData(&btreeAdapter{NewBTree(100)})
+	stor := NewData(&btreeAdapter{NewBTree(128)})
 
 	data := make([]*User, b.N)
 	for i := 0; i < b.N; i++ {

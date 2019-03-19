@@ -29,7 +29,7 @@ func generateModelStruct(model *memdata.Model) *jen.Statement {
 			st.Id(fieldName).Id(refType)
 		}
 
-		st.Id("_project").Op("*").Id(model.Project.Name).Tag(map[string]string{"msgp": "-"})
+		st.Id("_project").Id(model.Project.Name).Tag(map[string]string{"msgp": "-"})
 	}).Line()
 }
 
@@ -43,10 +43,12 @@ func generateModelFuncs(model *memdata.Model) *jen.Statement {
 			refFun.Return(jen.Id("model").Dot("_project").Dot(fnName)).Call(jen.Id("model").Dot(refName + targetModel.Indexed))
 		}).Line()
 	}
-	// add access to the project
-	fns = fns.Func().Parens(jen.Id("model").Op("*").Id(model.Name)).Id(model.Project.Name).Params().Op("*").Id(model.Project.Name).BlockFunc(func(projRef *jen.Group) {
-		projRef.Return().Id("model").Dot("_project")
-	}).Line()
+	if model.Project.StorageRef {
+		// add access to the project
+		fns = fns.Func().Parens(jen.Id("model").Op("*").Id(model.Name)).Id(model.Project.Name).Params().Op("*").Id(model.Project.Name).BlockFunc(func(projRef *jen.Group) {
+			projRef.Return().Id("model").Dot("_project")
+		}).Line()
+	}
 	// add access by one-to-many
 	for fieldName, targetModel := range model.HasMany {
 		targetModel := model.Project.Model(targetModel)

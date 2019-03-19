@@ -63,7 +63,7 @@ YAML files are required to define user models. There are two types of configurat
 *   **imports** (map of alias->import path) - use specified imports for lookup of custom types
 *   **models** (list of model definition) - list of user models
 *   **include_models** (list of string) - list of files of model definition relative to the current file
-
+*   **storage_ref** (bool, default false) - add storage reference to the generated models
 
 **model** yaml / definition
 
@@ -79,7 +79,6 @@ YAML files are required to define user models. There are two types of configurat
  think about it as array of ref to another models
  * **sequence** (list of string) - name fields that acts as sequences with automatic increment after insertion (field should be int64 and defined in `fields`)
  * **key** (string) - name primary key in model. Automatically defines `indexed` and `sequence` (if key is number)
- 
  
  ### CLI
  

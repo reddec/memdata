@@ -17,5 +17,6 @@ type Project struct {
 	Synchronized  bool
 	Imports       map[string]string
 	Models        []*Model
+	StorageRef    bool     `yaml:"storage_ref"`
 	IncludeModels []string `yaml:"include_models"`
 }

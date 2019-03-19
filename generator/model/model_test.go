@@ -9,7 +9,7 @@ import (
 )
 
 func TestGenerateModel(t *testing.T) {
-	project, err := memdata.ReadFile("sample.yaml")
+	project, err := memdata.ReadFile("example/sample.yaml")
 	if err != nil {
 		t.Error(err)
 		return

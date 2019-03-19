@@ -52,12 +52,47 @@ func GenerateProject(proj *memdata.Project) *jen.Statement {
 }
 
 func generateProjectInterfaces(proj *memdata.Project) *jen.Statement {
-	var code = jen.Line()
+	indexed := make(map[string]bool)
+	// project main interface - reader
+	var code = jen.Type().Id(proj.Name + "Reader").InterfaceFunc(func(iface *jen.Group) {
+		// index search and access
+		for _, model := range proj.Models {
+			indexName := model.Name + "By" + model.Indexed
+			fnName := model.Name
+			keyName := memdata.ToLowerCamel(model.Indexed)
+			if indexed[indexName] {
+				continue
+			}
+			indexed[indexName] = true
+			iface.Id(fnName).Params(jen.Id(keyName).Id(model.FieldType(model.Indexed))).Op("*").Id(model.Name)
+		}
+	}).Line().Line()
+	// project main interface - writer
+	code.Type().Id(proj.Name + "Writer").InterfaceFunc(func(iface *jen.Group) {
+		for _, model := range proj.Models {
+			// insert models (and assign sequences)
+			iface.Id("Insert" + model.Name).Params(jen.Id("item").Op("*").Id(model.Name)).Op("*").Id(model.Name)
+			// remove models (without following links)
+			keyName := memdata.ToLowerCamel(model.Indexed)
+			iface.Id("Remove" + model.Name).Params(jen.Id(keyName).Id(model.FieldType(model.Indexed)))
+			// update model
+			iface.Id("Update" + model.Name).Params(jen.Id("item").Op("*").Id(model.Name)).Op("*").Id(model.Name)
+		}
+	}).Line().Line()
+	// project main interface - r/w
+	code.Type().Id(proj.Name).InterfaceFunc(func(iface *jen.Group) {
+		iface.Id(proj.Name + "Reader")
+		iface.Id(proj.Name + "Writer")
+	}).Line().Line()
+
+	// models interfaces
 	for _, model := range proj.Models {
 		keyName := memdata.ToLowerCamel(model.Indexed)
 		code = code.Type().Id(model.Name + "Storage").InterfaceFunc(func(iface *jen.Group) {
 			// PutModel (id, value)
 			iface.Id("Put"+model.Name).Params(jen.Id(keyName).Id(model.FieldType(model.Indexed)), jen.Id("item").Op("*").Id(model.Name))
+			// UpdateModel (id, newValue)
+			iface.Id("Update"+model.Name).Params(jen.Id(keyName).Id(model.FieldType(model.Indexed)), jen.Id("item").Op("*").Id(model.Name))
 			// GetModel (id) -> value
 			iface.Id("Get" + model.Name).Params(jen.Id(keyName).Id(model.FieldType(model.Indexed))).Op("*").Id(model.Name)
 			// DeleteModel (id)
@@ -106,7 +141,7 @@ func generateDefaultStorages(proj *memdata.Project) *jen.Statement {
 }
 
 func generateProjectStruct(proj *memdata.Project) *jen.Statement {
-	return jen.Type().Id(proj.Name).StructFunc(func(st *jen.Group) {
+	return jen.Type().Id("impl" + proj.Name).StructFunc(func(st *jen.Group) {
 		// sequences fields
 		for _, model := range proj.Models {
 			for _, field := range model.AutoSequence {
@@ -132,7 +167,7 @@ func generateProjectFuncs(proj *memdata.Project) jen.Code {
 		for _, model := range proj.Models {
 			paramsBlock.Id("storage" + model.Name + "By" + model.Indexed).Id(model.Name + "Storage")
 		}
-	}).Op("*").Id(proj.Name).BlockFunc(func(initFunc *jen.Group) {
+	}).Id(proj.Name).BlockFunc(func(initFunc *jen.Group) {
 		// restore sequences if needed
 		for _, model := range proj.Models {
 			keyName := memdata.ToLowerCamel(model.Indexed)
@@ -148,7 +183,7 @@ func generateProjectFuncs(proj *memdata.Project) jen.Code {
 		}
 		// setup fields
 		initFunc.ReturnFunc(func(rt *jen.Group) {
-			rt.Op("&").Id(proj.Name).ValuesFunc(func(fv *jen.Group) {
+			rt.Op("&").Id("impl" + proj.Name).ValuesFunc(func(fv *jen.Group) {
 				for _, model := range proj.Models {
 					item := "index" + model.Name + "By" + model.Indexed
 					fv.Id(item).Op(":").Id("storage" + model.Name + "By" + model.Indexed)
@@ -163,7 +198,7 @@ func generateProjectFuncs(proj *memdata.Project) jen.Code {
 		})
 	}).Line()
 	// default constructor (based on map)
-	fs = fs.Func().Id("Default" + proj.Name).Params().Op("*").Id(proj.Name).BlockFunc(func(initFunc *jen.Group) {
+	fs = fs.Func().Id("Default" + proj.Name).Params().Id(proj.Name).BlockFunc(func(initFunc *jen.Group) {
 		initFunc.Return().Id("New" + proj.Name).CallFunc(func(callParams *jen.Group) {
 			for _, model := range proj.Models {
 				callParams.Id("NewMap" + model.Name + "Storage").Call()
@@ -181,7 +216,7 @@ func generateProjectFuncs(proj *memdata.Project) jen.Code {
 			continue
 		}
 		indexed[indexName] = true
-		fs = fs.Func().Parens(jen.Id("project").Op("*").Id(proj.Name)).Id(fnName).Params(jen.Id(keyName).Id(model.FieldType(model.Indexed))).Op("*").Id(model.Name).BlockFunc(func(indexFunc *jen.Group) {
+		fs = fs.Func().Parens(jen.Id("project").Op("*").Id("impl" + proj.Name)).Id(fnName).Params(jen.Id(keyName).Id(model.FieldType(model.Indexed))).Op("*").Id(model.Name).BlockFunc(func(indexFunc *jen.Group) {
 			if proj.Synchronized {
 				indexFunc.Id("project").Dot("_lock").Dot("RLock").Call()
 				indexFunc.Defer().Id("project").Dot("_lock").Dot("RUnlock").Call()
@@ -193,7 +228,7 @@ func generateProjectFuncs(proj *memdata.Project) jen.Code {
 	for _, model := range proj.Models {
 		for _, field := range model.AutoSequence {
 			fName := "Next" + model.Name + field
-			fs = fs.Func().Parens(jen.Id("project").Op("*").Id(proj.Name)).Id(fName).Params().Int64().BlockFunc(func(indexFunc *jen.Group) {
+			fs = fs.Func().Parens(jen.Id("project").Op("*").Id("impl" + proj.Name)).Id(fName).Params().Int64().BlockFunc(func(indexFunc *jen.Group) {
 				if proj.Synchronized {
 					indexFunc.Return().Qual("atomic", "AddInt64").Call(jen.Id("project").Dot("sequence"+model.Name+field), jen.Lit(1))
 				} else {
@@ -206,7 +241,7 @@ func generateProjectFuncs(proj *memdata.Project) jen.Code {
 	// insert models (and assign sequences)
 	for _, model := range proj.Models {
 		indexName := model.Name + "By" + model.Indexed
-		fs = fs.Func().Parens(jen.Id("project").Op("*").Id(proj.Name)).Id("Insert" + model.Name).Params(jen.Id("item").Op("*").Id(model.Name)).Op("*").Id(model.Name).BlockFunc(func(indexFunc *jen.Group) {
+		fs = fs.Func().Parens(jen.Id("project").Op("*").Id("impl" + proj.Name)).Id("Insert" + model.Name).Params(jen.Id("item").Op("*").Id(model.Name)).Op("*").Id(model.Name).BlockFunc(func(indexFunc *jen.Group) {
 
 			for _, auto := range model.AutoSequence {
 				indexFunc.Id("item").Dot(auto).Op("=").Id("project").Dot("Next" + model.Name + auto).Call()
@@ -222,11 +257,25 @@ func generateProjectFuncs(proj *memdata.Project) jen.Code {
 			indexFunc.Return().Id("item")
 		}).Line()
 	}
+	// update models (without assign sequences)
+	for _, model := range proj.Models {
+		indexName := model.Name + "By" + model.Indexed
+		fs = fs.Func().Parens(jen.Id("project").Op("*").Id("impl" + proj.Name)).Id("Update" + model.Name).Params(jen.Id("item").Op("*").Id(model.Name)).Op("*").Id(model.Name).BlockFunc(func(indexFunc *jen.Group) {
+			if proj.Synchronized {
+				indexFunc.Id("project").Dot("_lock").Dot("Lock").Call()
+				indexFunc.Id("project").Dot("index"+indexName).Dot("Update"+model.Name).Call(jen.Id("item").Dot(model.Indexed), jen.Id("item"))
+				indexFunc.Id("project").Dot("_lock").Dot("Unlock").Call()
+			} else {
+				indexFunc.Id("project").Dot("index"+indexName).Dot("Update"+model.Name).Call(jen.Id("item").Dot(model.Indexed), jen.Id("item"))
+			}
+			indexFunc.Return().Id("item")
+		}).Line()
+	}
 	// remove models (without following links)
 	for _, model := range proj.Models {
 		indexName := model.Name + "By" + model.Indexed
 		keyName := memdata.ToLowerCamel(model.Indexed)
-		fs = fs.Func().Parens(jen.Id("project").Op("*").Id(proj.Name)).Id("Remove" + model.Name).Params(jen.Id(keyName).Id(model.FieldType(model.Indexed))).BlockFunc(func(indexFunc *jen.Group) {
+		fs = fs.Func().Parens(jen.Id("project").Op("*").Id("impl" + proj.Name)).Id("Remove" + model.Name).Params(jen.Id(keyName).Id(model.FieldType(model.Indexed))).BlockFunc(func(indexFunc *jen.Group) {
 			if proj.Synchronized {
 				indexFunc.Id("project").Dot("_lock").Dot("Lock").Call()
 				indexFunc.Id("project").Dot("index" + indexName).Dot("Delete" + model.Name).Call(jen.Id(keyName))
