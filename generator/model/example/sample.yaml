@@ -1,5 +1,6 @@
 name: Storage
 package: main
+transactional: yes
 imports:
   apd: github.com/reddec/apd
 include_models:

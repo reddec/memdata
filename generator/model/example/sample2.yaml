@@ -1,5 +1,6 @@
 name: Data
 package: model
+transactional: yes
 models:
   - name: User
     fields:

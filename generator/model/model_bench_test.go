@@ -1,139 +1,201 @@
 package model
 
-import "testing"
+import (
+	"sync"
+	"testing"
+)
 
-type UserStorage interface {
-	PutUser(id int64, item *User)
+type DataReader interface {
+	User(id int64) *User
+}
+
+type DataWriter interface {
+	InsertUser(item *User) *User
+	RemoveUser(id int64)
+	UpdateUser(item *User) *User
+}
+
+type DataReadWriter interface {
+	DataReader
+	DataWriter
+}
+
+type DataReadWriterTx interface {
+	DataReader
+	DataWriter
+	Commit()
+	Discard()
+}
+
+type DataReaderTx interface {
+	DataReader
+	ReadUnlock()
+}
+
+type DataAction int
+
+const (
+	DataActionUnknown DataAction = 0
+	DataActionInsert  DataAction = 1
+	DataActionUpdate  DataAction = 2
+	DataActionDelete  DataAction = 3
+)
+
+type DataLogEntity struct {
+	// only of log entity should be filled
+	User *UserLogEntity
+}
+type Data interface {
+	ReadLock() DataReaderTx
+	ReadWriteLock() DataReadWriterTx
+}
+
+type DataTxStorage interface {
 	GetUser(id int64) *User
-	DeleteUser(id int64)
 	IterateUser(iterator func(id int64, item *User))
+	Apply(batch []DataLogEntity)
 }
 
-type Data struct {
+type implData struct {
 	sequenceUserId int64
-	indexUserById  UserStorage
+	storage        DataTxStorage
+	_tx            sync.RWMutex
+	_log           []DataLogEntity
 }
 
-func NewData(storageUserById UserStorage) *Data {
+func NewData(storage DataTxStorage) Data {
 	// restore auto-sequence for User.Id
 	var maxIdOfUser int64
-	storageUserById.IterateUser(func(id int64, item *User) {
+	storage.IterateUser(func(id int64, item *User) {
 		if id > maxIdOfUser {
 			maxIdOfUser = id
 		}
 	})
-	return &Data{indexUserById: storageUserById, sequenceUserId: maxIdOfUser}
+	return &implData{storage: storage, sequenceUserId: maxIdOfUser}
 }
-func DefaultData() *Data {
-	return NewData(NewMapUserStorage())
+func DefaultData() Data {
+	return NewData(NewMapDataStorage())
 }
-func (project *Data) User(id int64) *User {
-	return project.indexUserById.GetUser(id)
+func (project *implData) ReadLock() DataReaderTx {
+	project._tx.RLock()
+	return project
 }
-func (project *Data) NextUserId() int64 {
+func (project *implData) ReadWriteLock() DataReadWriterTx {
+	project._tx.Lock()
+	return project
+}
+func (project *implData) ReadUnlock() {
+	project._tx.RUnlock()
+}
+func (project *implData) Commit() {
+	project.storage.Apply(project._log)
+	project.Discard()
+}
+func (project *implData) Discard() {
+	if project._log != nil {
+		project._log = project._log[:0]
+	}
+	project._tx.Unlock()
+}
+func (project *implData) User(id int64) *User {
+	return project.storage.GetUser(id)
+}
+func (project *implData) NextUserId() int64 {
 	project.sequenceUserId++
 	return project.sequenceUserId
 }
-func (project *Data) InsertUser(item *User) *User {
+func (project *implData) InsertUser(item *User) *User {
 	item.Id = project.NextUserId()
 	item._project = project
-	project.indexUserById.PutUser(item.Id, item)
+	project._log = append(project._log, DataLogEntity{User: &UserLogEntity{Id: item.Id, Item: *item, Action: DataActionInsert}})
 	return item
 }
-func (project *Data) RemoveUser(id int64) {
-	project.indexUserById.DeleteUser(id)
+func (project *implData) UpdateUser(item *User) *User {
+	project._log = append(project._log, DataLogEntity{User: &UserLogEntity{Id: item.Id, Item: *item, Action: DataActionUpdate}})
+	return item
+}
+func (project *implData) RemoveUser(id int64) {
+	project._log = append(project._log, DataLogEntity{User: &UserLogEntity{Id: id, Action: DataActionDelete}})
 }
 
-type mapUserStorage struct {
-	data map[int64]*User
+type memDataMapStorage struct {
+	User map[int64]*User
 }
 
-func NewMapUserStorage() UserStorage {
-	return &mapUserStorage{data: make(map[int64]*User)}
+func NewMapDataStorage() DataTxStorage {
+	return &memDataMapStorage{User: make(map[int64]*User)}
 }
-func (storage *mapUserStorage) PutUser(id int64, item *User) {
-	storage.data[id] = item
+func (storage *memDataMapStorage) GetUser(id int64) *User {
+	return storage.User[id]
 }
-func (storage *mapUserStorage) GetUser(id int64) *User {
-	return storage.data[id]
-}
-func (storage *mapUserStorage) DeleteUser(id int64) {
-	delete(storage.data, id)
-}
-func (storage *mapUserStorage) IterateUser(iterator func(id int64, item *User)) {
-	for key, item := range storage.data {
+func (storage *memDataMapStorage) IterateUser(iterator func(id int64, item *User)) {
+	for key, item := range storage.User {
 		iterator(key, item)
+	}
+}
+func (storage *memDataMapStorage) Apply(batch []DataLogEntity) {
+	for _, tx := range batch {
+		if tx.User != nil {
+			switch tx.User.Action {
+			case DataActionInsert, DataActionUpdate:
+				storage.User[tx.User.Id] = &tx.User.Item
+			case DataActionDelete:
+				delete(storage.User, tx.User.Id)
+			}
+		}
 	}
 }
 
 type User struct {
-	Token    string
 	Id       int64
 	Name     string
 	Email    string
-	_project *Data `msgp:"-"`
+	Token    string
+	_project DataReader `msgp:"-"`
 }
 
-func (model *User) Data() *Data {
-	return model._project
+type UserLogEntity struct {
+	Id     int64
+	Item   User
+	Action DataAction
 }
-
-type arrayStore struct {
-	data []*User
-}
-
-func (a *arrayStore) PutUser(id int64, item *User) {
-	a.data = append(a.data, item)
-}
-
-func (*arrayStore) GetUser(id int64) *User {
-	panic("implement me")
-}
-
-func (*arrayStore) DeleteUser(id int64) {
-	panic("implement me")
-}
-
-func (*arrayStore) IterateUser(iterator func(id int64, item *User)) {}
 
 type treeAdapter struct {
 	tree *Tree
 }
 
-func (ta *treeAdapter) PutUser(id int64, item *User) {
-	ta.tree.Put(id, item)
+func (*treeAdapter) IterateUser(iterator func(id int64, item *User)) {
 }
-
 func (*treeAdapter) GetUser(id int64) *User {
 	panic("implement me")
 }
-
-func (*treeAdapter) DeleteUser(id int64) {
-	panic("implement me")
-}
-
-func (*treeAdapter) IterateUser(iterator func(id int64, item *User)) {
-
+func (b *treeAdapter) Apply(batch []DataLogEntity) {
+	for _, item := range batch {
+		switch item.User.Action {
+		case DataActionInsert:
+			b.tree.Put(item.User.Id, &item.User.Item)
+		}
+	}
 }
 
 type btreeAdapter struct {
 	tree *BTree
 }
 
-func (ta *btreeAdapter) PutUser(id int64, item *User) {
-	ta.tree.Put(id, item)
-}
-
 func (*btreeAdapter) GetUser(id int64) *User {
 	panic("implement me")
 }
 
-func (*btreeAdapter) DeleteUser(id int64) {
-	panic("implement me")
+func (*btreeAdapter) IterateUser(iterator func(id int64, item *User)) {
 }
 
-func (*btreeAdapter) IterateUser(iterator func(id int64, item *User)) {
-
+func (b *btreeAdapter) Apply(batch []DataLogEntity) {
+	for _, item := range batch {
+		switch item.User.Action {
+		case DataActionInsert:
+			b.tree.Put(item.User.Id, &item.User.Item)
+		}
+	}
 }
 
 func BenchmarkModel_defaultInsert(b *testing.B) {
@@ -149,31 +211,13 @@ func BenchmarkModel_defaultInsert(b *testing.B) {
 			Token: "123456XXYY",
 		}
 	}
+	tx := stor.ReadWriteLock()
 	b.StartTimer()
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		stor.InsertUser(data[i])
+		tx.InsertUser(data[i])
 	}
-}
-
-func BenchmarkModel_arrayInsert(b *testing.B) {
-	b.StopTimer()
-	stor := NewData(&arrayStore{})
-
-	data := make([]*User, b.N)
-	for i := 0; i < b.N; i++ {
-		data[i] = &User{
-			Name:  "some name",
-			Id:    int64(i),
-			Email: "user@example.com",
-			Token: "123456XXYY",
-		}
-	}
-	b.StartTimer()
-	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
-		stor.InsertUser(data[i])
-	}
+	tx.Commit()
 }
 
 func BenchmarkModel_treeInsert(b *testing.B) {
@@ -189,11 +233,13 @@ func BenchmarkModel_treeInsert(b *testing.B) {
 			Token: "123456XXYY",
 		}
 	}
+	tx := stor.ReadWriteLock()
 	b.StartTimer()
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		stor.InsertUser(data[i])
+		tx.InsertUser(data[i])
 	}
+	tx.Commit()
 }
 
 func BenchmarkModel_btreeInsert(b *testing.B) {
@@ -209,9 +255,11 @@ func BenchmarkModel_btreeInsert(b *testing.B) {
 			Token: "123456XXYY",
 		}
 	}
+	tx := stor.ReadWriteLock()
 	b.StartTimer()
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		stor.InsertUser(data[i])
+		tx.InsertUser(data[i])
 	}
+	tx.Commit()
 }

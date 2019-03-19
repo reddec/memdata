@@ -43,7 +43,7 @@ Generates interfaces and default implementation to store user-defined objects. A
 * Vendor independent storage drivers
 * Statically typed, no `interface{}` and runtime casts
 * Supports synchronized and non-synchronized access
-* TODO: separated read/write locks (multiple readers, one writer)
+* Separated read/write locks (multiple readers, one writer) in transactional mode
 
 See examples in `generator/model/example` folder for yaml definition.
 
@@ -64,6 +64,7 @@ YAML files are required to define user models. There are two types of configurat
 *   **models** (list of model definition) - list of user models
 *   **include_models** (list of string) - list of files of model definition relative to the current file
 *   **storage_ref** (bool, default false) - add storage reference to the generated models
+*   **transactional** (boolean, default false) - copy changes and apply as batch on commit
 
 **model** yaml / definition
 

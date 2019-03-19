@@ -6,7 +6,11 @@ import (
 )
 
 func GenerateModel(model *memdata.Model) *jen.Statement {
-	return generateModelStruct(model).Add(generateModelFuncs(model))
+	code := generateModelStruct(model).Add(generateModelFuncs(model))
+	if model.Project.Transactional {
+		code.Add(generateModelTransactionEntity(model))
+	}
+	return code
 }
 
 func generateModelStruct(model *memdata.Model) *jen.Statement {
@@ -29,7 +33,7 @@ func generateModelStruct(model *memdata.Model) *jen.Statement {
 			st.Id(fieldName).Id(refType)
 		}
 
-		st.Id("_project").Id(model.Project.Name).Tag(map[string]string{"msgp": "-"})
+		st.Id("_project").Id(model.Project.Name + "Reader").Tag(map[string]string{"msgp": "-"})
 	}).Line()
 }
 
@@ -63,4 +67,12 @@ func generateModelFuncs(model *memdata.Model) *jen.Statement {
 		}).Line()
 	}
 	return fns
+}
+
+func generateModelTransactionEntity(model *memdata.Model) *jen.Statement {
+	return jen.Type().Id(model.Name + "LogEntity").StructFunc(func(group *jen.Group) {
+		group.Id(model.Indexed).Id(model.FieldType(model.Indexed))
+		group.Id("Item").Id(model.Name) // no ref - should be copy
+		group.Id("Action").Id(model.Project.Name + "Action")
+	}).Line()
 }
